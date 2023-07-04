@@ -12,3 +12,8 @@
 <% content_for :header_links do %>
   <a class="add" href="/lists/new">New List</a>
 <% end %>
+
+<% if session[:lists].empty? %>
+  <main id="no_list">
+<% end %>
+You don't have any todo lists. Why not create one?
