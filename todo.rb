@@ -37,23 +37,9 @@ helpers do
     complete_todos, incomplete_todos = todos.partition do |todo|
       todo[:completed]
     end
-
     incomplete_todos.each { |todo| yield(todo, todos.index(todo))}
     complete_todos.each { |todo| yield(todo, todos.index(todo))}
   end
-  #   incomplete_todos = {}
-  #   complete_todos = {}
-
-  #   list.each_with_index do |todo, index| # list is a hash name/completed
-  #     if todo[:completed]
-  #       complete_todos[index] = todo
-  #     else
-  #       incomplete_todos[index] = todo
-  #     end
-  #   end
-  #   incomplete_todos.each(&block)
-  #   complete_todos.each(&block)
-  # end
 end
 
 before do

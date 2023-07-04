@@ -27,7 +27,14 @@
         </div>
       <% end %>
 
-    <main>
+    <% if session[:lists].empty? %>
+      <main id="no_list">
+    <% else %>
+      <main>
+    <% end %>
+      <% if session[:lists].empty? %>
+      You don't have any todo lists. Why not create one?
+      <% end %>
       <%= yield %>
     </main>
   </body>
