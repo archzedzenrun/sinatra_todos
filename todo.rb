@@ -6,6 +6,8 @@ require "tilt/erubis"
 configure do
   enable :sessions
   set :session_secret, '19390b1c59d812f894da0c2480155c5ea0089361ed1f17f632998d2fd7f19147'
+
+  set :erb, :escape_html => true
 end
 
 helpers do
@@ -87,22 +89,24 @@ end
 # View a single todo list
 get "/lists/:id" do
   @list_id = params[:id].to_i
-  @list = session[:lists][@list_id]
+  @list = load_list(@list_id)
   erb :list, layout: :layout
 end
 
 # Edit existing todo list
 get "/lists/:id/edit" do
-  @list = session[:lists][params[:id].to_i]
+  @list_id = params[:id].to_i
+  @list = load_list(@list_id)
 
   erb :edit_list, layout: :layout
 end
+
 # Updates existing todo list
 post "/lists/:id" do
   list_name = params[:list_name].strip
   id = params[:id].to_i
   error = error_for_list_name(list_name)
-  @list = session[:lists][id]
+  @list = load_list(@list_id)
   if error
     session[:error] = error
     erb :edit_list, layout: :layout
@@ -116,9 +120,14 @@ end
 # Delete a todo list
 post "/lists/:id/delete" do
   id = params[:id].to_i
-  session[:success] = "The list has been deleted."
   session[:lists].delete(session[:lists][id])
-  redirect "/lists"
+  session[:success] = "The list has been deleted."
+  if env["HTTP_X_REQUESTED_WITH"] == "XMLHttpRequest"
+    "/lists"
+  else
+    session[:success] = "The list has been deleted."
+    redirect "/lists"
+  end
 end
 
 def error_for_todo(name)
@@ -127,17 +136,23 @@ def error_for_todo(name)
   end
 end
 
+def next_todo_id(todos)
+  max = todos.map { |todo| todo[:id] }.max || 0
+  max + 1
+end
+
 # Add a new todo to a list
 post "/lists/:list_id/todos" do
   @list_id = params[:list_id].to_i
-  @list = session[:lists][@list_id]
+  @list = load_list(@list_id)
   text = params[:todo].strip
   error = error_for_todo(text)
   if error
     session[:error] = error
     erb :list, layout: :layout
   else
-    @list[:todos] << { name: text, completed: false }
+    id = next_todo_id(@list[:todos])
+    @list[:todos] << { id: id, name: text, completed: false }
     session[:success] = "The todo was added."
     redirect "/lists/#{@list_id}"
   end
@@ -146,21 +161,30 @@ end
 # Delete a todo
 post "/lists/:list_id/todos/:id/delete" do
   @list_id = params[:list_id].to_i
-  @list = session[:lists][@list_id]
-  todo_id = params[:id].to_i
+  @list = load_list(@list_id)
 
-  @list[:todos].delete_at(todo_id)
-  session[:success] = "The todo has been deleted."
-  redirect "/lists/#{@list_id}"
+  todo_id = params[:id].to_i
+  @list[:todos].reject! { |todo| todo[:id] == todo_id }
+
+  if env["HTTP_X_REQUESTED_WITH"] == "XMLHttpRequest"
+    status 204
+  else
+    session[:success] = "The todo has been deleted."
+    redirect "/lists/#{@list_id}"
+  end
 end
 
 # Update status of a todo
 post "/lists/:list_id/todos/:id" do
   @list_id = params[:list_id].to_i
-  @list = session[:lists][@list_id]
+  @list = load_list(@list_id)
+
   todo_id = params[:id].to_i
   is_completed = params[:completed] == "true"
-  @list[:todos][todo_id][:completed] = is_completed
+
+  todo = @list[:todos].find { |todo| todo[:id] == todo_id }
+  todo[:completed] = is_completed
+
   session[:success] = "The todo has been updated."
   redirect "/lists/#{@list_id}"
 end
@@ -168,9 +192,21 @@ end
 # Mark all todos as complete for a list
 post "/lists/:id/complete_all" do
   @list_id = params[:id].to_i
-  @list = session[:lists][@list_id]
+  @list = load_list(@list_id)
 
   @list[:todos].each { |todo| todo[:completed] = true }
   session[:success] = "All todos have been completed."
   redirect "/lists/#{@list_id}"
+end
+
+def load_list(index)
+  list = session[:lists][index] if index && session[:lists][index]
+  return list if list
+
+  session[:error] = "The specified list was not found."
+  redirect "/lists"
+end
+
+not_found do
+  redirect "/"
 end
