@@ -31,16 +31,16 @@ helpers do
     complete_lists, incomplete_lists = lists.partition do |list|
       list_complete?(list)
     end
-    incomplete_lists.each { |list| yield(list, lists.index(list))}
-    complete_lists.each { |list| yield(list, lists.index(list))}
+    incomplete_lists.each(&block)
+    complete_lists.each(&block)
   end
 
   def sort_todos(todos, &block)
     complete_todos, incomplete_todos = todos.partition do |todo|
       todo[:completed]
     end
-    incomplete_todos.each { |todo| yield(todo, todos.index(todo))}
-    complete_todos.each { |todo| yield(todo, todos.index(todo))}
+    incomplete_todos.each(&block)
+    complete_todos.each(&block)
   end
 end
 
@@ -75,7 +75,8 @@ post "/lists" do
     session[:error] = error
     erb :new_list, layout: :layout
   else
-    session[:lists] << { name: list_name, todos: [] }
+    id = next_todo_id(session[:lists])
+    session[:lists] << { id: id, name: list_name, todos: [] }
     session[:success] = "The list has been created."
     redirect "/lists"
   end
@@ -88,8 +89,11 @@ end
 
 # View a single todo list
 get "/lists/:id" do
-  @list_id = params[:id].to_i
-  @list = load_list(@list_id)
+  id = params[:id].to_i
+  @list = load_list(id)
+  @list_name = @list[:name]
+  @list_id = @list[:id]
+  @todos = @list[:todos]
   erb :list, layout: :layout
 end
 
@@ -106,7 +110,7 @@ post "/lists/:id" do
   list_name = params[:list_name].strip
   id = params[:id].to_i
   error = error_for_list_name(list_name)
-  @list = load_list(@list_id)
+  @list = load_list(id)
   if error
     session[:error] = error
     erb :edit_list, layout: :layout
@@ -120,7 +124,7 @@ end
 # Delete a todo list
 post "/lists/:id/delete" do
   id = params[:id].to_i
-  session[:lists].delete(session[:lists][id])
+  session[:lists].reject! { |list| list[:id] == id }
   session[:success] = "The list has been deleted."
   if env["HTTP_X_REQUESTED_WITH"] == "XMLHttpRequest"
     "/lists"
@@ -199,14 +203,10 @@ post "/lists/:id/complete_all" do
   redirect "/lists/#{@list_id}"
 end
 
-def load_list(index)
-  list = session[:lists][index] if index && session[:lists][index]
+def load_list(id)
+  list = session[:lists].find { |list| list[:id] == id }
   return list if list
 
   session[:error] = "The specified list was not found."
   redirect "/lists"
-end
-
-not_found do
-  redirect "/"
 end
